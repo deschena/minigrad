@@ -22,14 +22,13 @@ class TestMinigrad(unittest.TestCase):
             d_in = 3
             d_out = 5
 
-            w = torch.randn((d_out, d_in), requires_grad=True)
+            w = torch.empty((d_out, d_in), requires_grad=True)
             b = torch.zeros(d_out, requires_grad=True)
 
             layer = Linear(d_in, d_out)
             # Set weights of the layer equal to pytorch ones
             with torch.no_grad():
-                layer.weights[:, :] = w
-                layer.bias[:] = b
+                w[:, :] = layer.weights[:, :]
 
             # pytorch loss
             loss = nn.MSELoss()
@@ -52,18 +51,19 @@ class TestMinigrad(unittest.TestCase):
             self.assertTrue( torch.allclose(w.grad, layer.grad[0]) )
             self.assertTrue( torch.allclose(b.grad, layer.grad[1]) )
 
+# ============================================================================================================
+
     def test_simple_lin_relu(self):
         d_in = 3
         d_out = 5
 
-        w = torch.randn((d_out, d_in), requires_grad=True)
+        w = torch.empty((d_out, d_in), requires_grad=True)
         b = torch.zeros(d_out, requires_grad=True)
 
         layer = Linear(d_in, d_out)
         # Set weights of the layer equal to pytorch ones
         with torch.no_grad():
-            layer.weights[:, :] = w
-            layer.bias[:] = b
+            w[:, :] = layer.weights[:, :]
 
         input = torch.tensor([1., 2., 3.])
         target = torch.randn(d_out)
@@ -96,6 +96,8 @@ class TestMinigrad(unittest.TestCase):
         self.assertTrue( torch.allclose(w.grad, layer.grad[0]) )
         self.assertTrue( torch.allclose(b.grad, layer.grad[1]) )
 
+# ============================================================================================================
+# ============================================================================================================
 
 if __name__ == "__main__":
     unittest.main()
