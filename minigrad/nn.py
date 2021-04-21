@@ -26,23 +26,6 @@ class Module(object):
     @params.setter
     def params(self, new_value):
         pass
-
-# ============================================================================================================
-
-class Loss(object):
-
-    def forward(self, pred, target):
-        raise NotImplementedError
-
-    def backward(self, pred, target):
-        raise NotImplementedError
-
-    def __call__(self, pred, target):
-        return self.forward(pred, target)
-        
-    @property
-    def params(self):
-        return []
 # ============================================================================================================
 
 class Linear(Module):
@@ -71,19 +54,15 @@ class Linear(Module):
     @property
     def params(self):
         return [self.weights, self.bias]
-
 # ============================================================================================================
 
 class Sequential(Module):
-
     def __init__(self, *args):
         super().__init__()
         self.modules = args
         
-
     def forward(self, x):
         y = x
-
         for m in self.modules:
             y = m.forward(y)
         return y
@@ -123,7 +102,6 @@ class Sequential(Module):
     def zero_grad(self):
         for m in self.modules:
             m.zero_grad()
-
 # ============================================================================================================
 
 class ReLU(Module):
@@ -139,7 +117,6 @@ class ReLU(Module):
         mask[x <= 0] = 0
         mask[x > 0] = 1
         return gradwrtoutput * mask
-
 # ============================================================================================================
 
 class Tanh(Module):
@@ -150,7 +127,22 @@ class Tanh(Module):
 
     def backward(self, gradwrtoutput, x):
         gradwrtoutput * (1 - self.forward(x) ** 2)
+# ============================================================================================================
 
+class Loss(object):
+
+    def forward(self, pred, target):
+        raise NotImplementedError
+
+    def backward(self, pred, target):
+        raise NotImplementedError
+
+    def __call__(self, pred, target):
+        return self.forward(pred, target)
+        
+    @property
+    def params(self):
+        return []
 # ============================================================================================================
 
 class MSELoss(Loss):
