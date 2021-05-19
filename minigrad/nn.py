@@ -3,26 +3,48 @@ from torch import empty
 from math import e
 
 class Module(object):
-
+    """Base class for composable elements of models
+    """
     def __init__(self):
         self.grad = None
 
     def forward(self, input):
+        """Compute forward pass
+
+        Args:
+            input (torch.tensor): Input of the layer
+        """
         raise NotImplementedError
 
-    def backward(self, gradwrtoutput):
+    def backward(self, gradwrtoutput, x):
+        """Compute backward pass
+
+        Args:
+            gradwrtoutput (torch.tensor): Tensor of gradients wrt to ouput of layer
+            x (torch.tensor): Input tensor used in forward pass (required to compute some gradients)
+        """
         raise NotImplementedError
 
     def zero_grad(self):
+        """Erases gradients previously kept in memory
+        """
         self.grad = None
 
     def __call__(self, input):
+        """Allows to call forward pass as in torch
+        """
         return self.forward(input)
 
     @property
     def params(self):
+        """Trainable parameters of the mode
+
+        Returns:
+            List[torch.Tensor]: List of all parameters
+        """
         return []
 
+    # Disable setter of params. We only want the model to define them, not the outside world.
     @params.setter
     def params(self, new_value):
         pass
@@ -30,6 +52,12 @@ class Module(object):
 
 class Linear(Module):
     def __init__(self, input_features, output_features):
+        """Linear layer. Implements W @ X + b with Xavier initialization of weight matrix W
+
+        Args:
+            input_features (int): Number of input features
+            output_features (int): Number of output features
+        """
         super(Linear, self).__init__()
 
         # Xavier initialization
@@ -57,6 +85,8 @@ class Linear(Module):
 # ============================================================================================================
 
 class Sequential(Module):
+    """Allows stacking of simpler layers
+    """
     def __init__(self, *args):
         super().__init__()
         self.modules = args
@@ -96,8 +126,7 @@ class Sequential(Module):
     def params(self):
         _params = []
         for m in self.modules:
-            if m.params != []:
-                _params += m.params
+            _params += m.params # If a layer contains no tunable parameter, m.params = []
         return _params
     def zero_grad(self):
         for m in self.modules:
@@ -105,9 +134,10 @@ class Sequential(Module):
 # ============================================================================================================
 
 class ReLU(Module):
-
+    """ReLU activation function
+    """
     def forward(self, x):
-        res = empty(size=x.shape)
+        res = empty(size=x.shape) # Makes a copy of the input to avoid modifying the input in place
         res[x <= 0] = 0
         res[x > 0] = x[x > 0]
         return res
@@ -120,6 +150,8 @@ class ReLU(Module):
 # ============================================================================================================
 
 class Tanh(Module):
+    """Tanh activation function
+    """
     def forward(self, x):
         ex = e ** x
         e_x = e ** (-x)
@@ -146,6 +178,8 @@ class Loss(object):
 # ============================================================================================================
 
 class MSELoss(Loss):
+    """Standard MSE Loss
+    """
     def forward(self, pred, target):
         return ((pred - target) ** 2).sum() / (len(pred))
 

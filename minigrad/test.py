@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 # =====================================================================================================================================================================
 # Setups pyplot layout and deactivate PyTorch autograd
 from matplotlib.pyplot import figure
-figure(figsize=(8, 8), dpi=80)
+figure(dpi=300)
 torch.set_grad_enabled(False)
 # =====================================================================================================================================================================
 
@@ -139,33 +139,49 @@ def train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, ep
 
     return train_losses, train_accuracy, train_f1_score, test_losses, test_accuracy, test_f1_score
 # =====================================================================================================================================================================
-
-def plot(x, y_train, y_test, metric, model_struct, filename, xlog=False, ylog=False):
-    """Plot metric related to training of the model
+def plot_adam_vs_sgd(x, train_adam, test_adam, train_sgd, test_sgd, train_sgdm, test_sgdm, metric, momentum):
+    """Utility function for comparing convergence of Adam and SGD
 
     Args:
-        x (Iterable): x axis data
-        y_train (Iterable): Metric on train set
-        y_test (Iterable): Metric on test set
-        metric (str): Name of the metric used. Displayed in title
-        model_struct (str): Description of the model structure. Displayed in title
-        filename (str): Name of file where to save the figure
-        xlog (bool, optional): Use logscale on x axis. Defaults to False.
-        ylog (bool, optional): Use logscale on y axis. Defaults to False.
+        x (Iterable): x axis values for plots
+        train_adam (Iterable): Metric at each epoch on training data with adam optimizer
+        test_adam (Iterable): Metric at each epoch on validation data with adam optimizer
+        train_sgd (Iterable): Metric at each epoch on training data with SGD optimizer
+        test_sgd (Iterable): Metric at each epoch on validation data with SGD optimizer
+        metric (str): Metric under assessment
     """
-    fig, ax = plt.subplots()
-    ax.set_title(f"{metric} ({model_struct})")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel(metric)
-    ax.set_yscale("log" if ylog else "linear")
-    ax.set_xscale("log" if xlog else "linear")
-    ax.plot(x, y_train, label=f"Train {metric}")
-    ax.plot(x, y_test, label=f"Test {metric}")
-    ax.grid()
-    ax.legend()
-    fig.savefig(filename)
+    plt.loglog(x, train_adam, label=f"Train (Adam)")
+    plt.loglog(x, test_adam, label=f"Test (Adam)")
+    plt.loglog(x, train_sgd, label=f"Train (SGD)")
+    plt.loglog(x, test_sgd, label=f"Test (SGD)")
+    plt.loglog(x, train_sgdm, label=f"Train (SGD w/ momentum = {momentum})")
+    plt.loglog(x, test_sgdm, label=f"Test (SGD w/ momentum = {momentum})")
+
+    plt.title(f"Comparing {metric} between optimizers")
+    plt.xlabel("Epoch")
+    plt.grid()
+    plt.legend()
+    plt.savefig(f"{metric}_adam_sgd.png")
+    plt.tight_layout()
+    plt.clf()
 # =====================================================================================================================================================================
 
+def simple_three_layer_model():
+    """Create a simple layer 
+
+    Returns:
+        [type]: [description]
+    """
+    return nn.Sequential(
+            nn.Linear(2, 25),
+            nn.ReLU(),
+            nn.Linear(25, 25),
+            nn.ReLU(),
+            nn.Linear(25, 25),
+            nn.ReLU(),
+            nn.Linear(25, 1)
+            )
+# =====================================================================================================================================================================
 def circle_experiment(nb_samples=1000, nb_epoch=300):
     """Simple first experiment with circular boundary
 
@@ -176,33 +192,80 @@ def circle_experiment(nb_samples=1000, nb_epoch=300):
     x_train, y_train = generate_circle_samples(nb_samples, seed=42)
     x_test, y_test = generate_circle_samples(nb_samples, seed=66)
 
-    model = nn.Sequential(
-    nn.Linear(2, 25),
-    nn.ReLU(),
-    nn.Linear(25, 25),
-    nn.ReLU(),
-    nn.Linear(25, 25),
-    nn.ReLU(),
-    nn.Linear(25, 1)
-    )
-
-    optimizer = optim.SGD(model, lr=0.001)
+    # Train first model with SGD without momentum
+    model1 = simple_three_layer_model()
+    optimizer = optim.SGD(model1, momentum=0)
     loss_fct = nn.MSELoss()
 
-    (train_losses, 
-    train_accuracy, 
-    train_f1_score, 
-    test_losses, 
-    test_accuracy, 
-    test_f1_score) = train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epoch)
+    print("Start training with SGD")
+    (train_losses_SGD, 
+    train_accuracy_SGD, 
+    train_f1_score_SGD, 
+    test_losses_SGD, 
+    test_accuracy_SGD, 
+    test_f1_score_SGD) = train_model(model1, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epoch)
 
+    # Train first model with SGD with momentum
+    model2 = simple_three_layer_model()
+    momentum = 0.8
+    optimizer = optim.SGD(model2, momentum=momentum)
+    loss_fct = nn.MSELoss()
+
+    print("Start training with SGD (with momentum)")
+    (train_losses_SGDM, 
+    train_accuracy_SGDM, 
+    train_f1_score_SGDM, 
+    test_losses_SGDM, 
+    test_accuracy_SGDM, 
+    test_f1_score_SGDM) = train_model(model2, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epoch)
+    
+    # Train identical model with Adam
+    model3 = simple_three_layer_model()
+
+    optimizer = optim.Adam(model3)
+    loss_fct = nn.MSELoss()
+    print("Start training with Adam")
+    (train_losses_adam, 
+    train_accuracy_adam, 
+    train_f1_score_adam, 
+    test_losses_adam, 
+    test_accuracy_adam, 
+    test_f1_score_adam) = train_model(model3, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epoch)
+
+    # Plot loss, accuracy and f1 score of both models under SGD and Adam
     x = range(nb_epoch)
-    model_struct = "3 hidden layers, 25 units, ReLU"
-    plot(x, train_losses, test_losses, "Loss", model_struct, "loss_circle.png")
-    plot(x, train_accuracy, test_accuracy, "Accuracy", model_struct, "accuracy_circle.png")
-    plot(x, train_f1_score, test_f1_score, "F1-score", model_struct, "f1_circle.png")
-# =====================================================================================================================================================================
-
+    # Plot loss
+    plot_adam_vs_sgd(x, 
+                    train_losses_adam, 
+                    test_losses_adam, 
+                    train_losses_SGD, 
+                    test_losses_SGD,
+                    train_losses_SGDM, 
+                    test_losses_SGDM,
+                    "MSE",
+                    momentum=momentum)
+    # ---
+    # Plot accuracy
+    plot_adam_vs_sgd(x, 
+                    train_accuracy_adam, 
+                    test_accuracy_adam, 
+                    train_accuracy_SGD, 
+                    test_accuracy_SGD,
+                    train_accuracy_SGDM, 
+                    test_accuracy_SGDM,
+                    "accuracy",
+                    momentum=momentum)
+    # ---
+    # Plot F1-score
+    plot_adam_vs_sgd(x, 
+                    train_f1_score_adam, 
+                    test_f1_score_adam, 
+                    train_f1_score_SGD, 
+                    test_f1_score_SGD,
+                    train_f1_score_SGDM, 
+                    test_f1_score_SGDM,
+                    "F1-score",
+                    momentum=momentum)
 def main():
     circle_experiment(nb_epoch=300)
 # =====================================================================================================================================================================
