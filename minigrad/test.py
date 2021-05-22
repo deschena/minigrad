@@ -1,17 +1,16 @@
-from nn import *
-from optim import *
-
-from minigrad import nn
-from minigrad import optim
+import nn
+import optim
 import math
 import torch 
 from matplotlib import pyplot as plt
 
 # =====================================================================================================================================================================
 # Setups pyplot layout and deactivate PyTorch autograd
+# NOTE: RUNNING THE FILE SHOULD TAKE LESS THAN 10 MINUTES. IT TRAINS SEVERAL MODELS AND DRAWS PLOTS
 from matplotlib.pyplot import figure
 figure(dpi=300)
 torch.set_grad_enabled(False)
+torch.manual_seed(999)
 # =====================================================================================================================================================================
 
 def generate_circle_samples(nb_samples, seed=42):
@@ -33,9 +32,11 @@ def generate_circle_samples(nb_samples, seed=42):
 
     labels = torch.empty(nb_samples)
     labels[dist >= radius] = 0.0
+
     labels[dist < radius] = 1.0
 
     return samples, labels
+
 # =====================================================================================================================================================================
 
 def f1_score (true_positive, positive, gt_positive):
@@ -89,10 +90,10 @@ def compute_statistics(loss_fct, model, x, y):
     mean_loss = loss / len(y)
     accuracy = (true_positive + true_negative) / len(y)
     f1 = f1_score(true_positive, true_positive + false_positive, true_positive + false_negative)
-    return mean_loss, accuracy, f1
+    return mean_loss.item(), accuracy, f1
 # =====================================================================================================================================================================
 
-def train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs = 300):
+def train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs = 100):
     """Training loop of the model
 
     Args:
@@ -120,7 +121,7 @@ def train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, ep
         for sample, label in zip(x_train, y_train):
             # Forward pass
             pred = model(sample)
-            loss_fct(pred, label)
+            # loss_fct(pred, label)
             # Backward pass
             loss_grad = loss_fct.backward(pred, label)
             optimizer.zero_grad()
@@ -139,7 +140,8 @@ def train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, ep
 
     return train_losses, train_accuracy, train_f1_score, test_losses, test_accuracy, test_f1_score
 # =====================================================================================================================================================================
-def plot_adam_vs_sgd(x, train_adam, test_adam, train_sgd, test_sgd, train_sgdm, test_sgdm, metric, momentum):
+
+def plot_adam_vs_sgd(x, test_adam, test_sgd, test_sgdm, metric, momentum):
     """Utility function for comparing convergence of Adam and SGD
 
     Args:
@@ -150,29 +152,38 @@ def plot_adam_vs_sgd(x, train_adam, test_adam, train_sgd, test_sgd, train_sgdm, 
         test_sgd (Iterable): Metric at each epoch on validation data with SGD optimizer
         metric (str): Metric under assessment
     """
-    plt.loglog(x, train_adam, label=f"Train (Adam)")
-    plt.loglog(x, test_adam, label=f"Test (Adam)")
-    plt.loglog(x, train_sgd, label=f"Train (SGD)")
-    plt.loglog(x, test_sgd, label=f"Test (SGD)")
-    plt.loglog(x, train_sgdm, label=f"Train (SGD w/ momentum = {momentum})")
-    plt.loglog(x, test_sgdm, label=f"Test (SGD w/ momentum = {momentum})")
+    figure(figsize=(8, 6), dpi=300)
+    plt.plot(x, test_adam, label="Adam")
+    plt.plot(x, test_sgd, label="SGD")
+    plt.plot(x, test_sgdm, label=f"SGD w/ momentum = {momentum}")
 
-    plt.title(f"Comparing {metric} between optimizers")
     plt.xlabel("Epoch")
     plt.grid()
-    plt.legend()
+    plt.legend(fontsize=20)
     plt.savefig(f"{metric}_adam_sgd.png")
     plt.tight_layout()
     plt.clf()
+    # =====================================================================================================================================================================
+
+def plot_circle_samples(samples, labels):
+
+    central_points = samples[labels == 1]
+    outter_points = samples[labels == 0]
+    fig, ax = plt.subplots(figsize=(5, 5))
+
+    ax.scatter(central_points[:, 0], central_points[:, 1], c="limegreen")
+    ax.scatter(outter_points[:, 0], outter_points[:, 1], c="m")
+    circ = plt.Circle(  (0.5, 0.5), 1 / (2 * math.pi) ** 0.5, 
+                        fill=False, 
+                        color="red", 
+                        linewidth=6)
+    ax.add_artist(circ)
+    fig.savefig("samples.png", dpi=300)
+    plt.clf()
 # =====================================================================================================================================================================
 
-def simple_three_layer_model():
-    """Create a simple layer 
-
-    Returns:
-        [type]: [description]
-    """
-    return nn.Sequential(
+def simple_three_layer_model(use_sigmoid=False):
+    model = nn.Sequential(
             nn.Linear(2, 25),
             nn.ReLU(),
             nn.Linear(25, 25),
@@ -181,93 +192,94 @@ def simple_three_layer_model():
             nn.ReLU(),
             nn.Linear(25, 1)
             )
+    if use_sigmoid:
+        model.add_module(nn.Sigmoid())
+    return model
 # =====================================================================================================================================================================
-def circle_experiment(nb_samples=1000, nb_epoch=300):
+def compare_optims(nb_samples=1000, nb_epochs=70, sgd_momentum=0.9, use_sigmoid=False, ):
     """Simple first experiment with circular boundary
 
     Args:
         nb_samples (int, optional): Number of samples for train/test. Defaults to 1000.
-        nb_epoch (int, optional): Number of training epochs. Defaults to 300.
+        nb_epochs (int, optional): Number of training epochs. Defaults to 300.
     """
     x_train, y_train = generate_circle_samples(nb_samples, seed=42)
     x_test, y_test = generate_circle_samples(nb_samples, seed=66)
 
+    lrs = [0.1, 0.01, 0.001]
     # Train first model with SGD without momentum
-    model1 = simple_three_layer_model()
-    optimizer = optim.SGD(model1, momentum=0)
-    loss_fct = nn.MSELoss()
+    best_lr_sgd = -1
+    best_f1_sgd = -1
+    f1_seq_sgd = None
 
-    print("Start training with SGD")
-    (train_losses_SGD, 
-    train_accuracy_SGD, 
-    train_f1_score_SGD, 
-    test_losses_SGD, 
-    test_accuracy_SGD, 
-    test_f1_score_SGD) = train_model(model1, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epoch)
+    for lr in lrs:
+        model = simple_three_layer_model(use_sigmoid)
+        optimizer = optim.SGD(model, momentum=0)
+        loss_fct = nn.MSELoss()
+        print(f"Start training with SGD lr={lr}")
+        _, _, _, _, _, test_f1_score_SGD = train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epochs)
+        curr_f1 = max(test_f1_score_SGD)
+        if curr_f1 > best_f1_sgd:
+            best_f1_sgd = curr_f1
+            f1_seq_sgd = test_f1_score_SGD
+            best_lr_sgd = lr
 
-    # Train first model with SGD with momentum
-    model2 = simple_three_layer_model()
-    momentum = 0.8
-    optimizer = optim.SGD(model2, momentum=momentum)
-    loss_fct = nn.MSELoss()
+    # Train second model with SGD with momentum
+    best_lr_sgdm = -1
+    best_f1_sgdm = -1
+    f1_seq_sgdm = None
 
-    print("Start training with SGD (with momentum)")
-    (train_losses_SGDM, 
-    train_accuracy_SGDM, 
-    train_f1_score_SGDM, 
-    test_losses_SGDM, 
-    test_accuracy_SGDM, 
-    test_f1_score_SGDM) = train_model(model2, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epoch)
+    for lr in lrs:
+        model = simple_three_layer_model(use_sigmoid)
+        optimizer = optim.SGD(model, momentum=sgd_momentum)
+        loss_fct = nn.MSELoss()
+        print(f"Start training with SGDM lr={lr}")
+        _, _, _, _, _, test_f1_score_SGDM = train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epochs)
+        curr_f1 = max(test_f1_score_SGDM)
+        if curr_f1 > best_f1_sgdm:
+            best_f1_sgdm = curr_f1
+            f1_seq_sgdm = test_f1_score_SGDM
+            best_lr_sgdm = lr
+
+    # Train third model with Adam
+    best_lr_adam = -1
+    best_f1_adam = -1
+    f1_seq_adam = None
+
+    for lr in lrs:
+        model = simple_three_layer_model(use_sigmoid)
+        optimizer = optim.Adam(model, lr=lr)
+        loss_fct = nn.MSELoss()
+        print(f"Start training with Adam lr={lr}")
+        _, _, _, _, _, test_f1_score_adam = train_model(model, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epochs)
+        
+        curr_f1 = max(test_f1_score_adam)
+        if curr_f1 > best_f1_adam:
+            best_f1_adam = curr_f1
+            f1_seq_adam = test_f1_score_adam
+            best_lr_adam = lr
+
     
-    # Train identical model with Adam
-    model3 = simple_three_layer_model()
-
-    optimizer = optim.Adam(model3)
-    loss_fct = nn.MSELoss()
-    print("Start training with Adam")
-    (train_losses_adam, 
-    train_accuracy_adam, 
-    train_f1_score_adam, 
-    test_losses_adam, 
-    test_accuracy_adam, 
-    test_f1_score_adam) = train_model(model3, loss_fct, optimizer, x_train, y_train, x_test, y_test, epochs=nb_epoch)
-
-    # Plot loss, accuracy and f1 score of both models under SGD and Adam
-    x = range(nb_epoch)
-    # Plot loss
-    plot_adam_vs_sgd(x, 
-                    train_losses_adam, 
-                    test_losses_adam, 
-                    train_losses_SGD, 
-                    test_losses_SGD,
-                    train_losses_SGDM, 
-                    test_losses_SGDM,
-                    "MSE",
-                    momentum=momentum)
-    # ---
-    # Plot accuracy
-    plot_adam_vs_sgd(x, 
-                    train_accuracy_adam, 
-                    test_accuracy_adam, 
-                    train_accuracy_SGD, 
-                    test_accuracy_SGD,
-                    train_accuracy_SGDM, 
-                    test_accuracy_SGDM,
-                    "accuracy",
-                    momentum=momentum)
-    # ---
-    # Plot F1-score
-    plot_adam_vs_sgd(x, 
-                    train_f1_score_adam, 
-                    test_f1_score_adam, 
-                    train_f1_score_SGD, 
-                    test_f1_score_SGD,
-                    train_f1_score_SGDM, 
-                    test_f1_score_SGDM,
+    # Plot best f1_score for each optimizer
+    x = range(nb_epochs) 
+    plot_adam_vs_sgd(x,
+                    f1_seq_adam, 
+                    f1_seq_sgd,
+                    f1_seq_sgdm,
                     "F1-score",
-                    momentum=momentum)
+                    momentum=sgd_momentum)
+
+    # Compute the best result for each method
+    print(f"Adam result: F1: {best_f1_adam :.3f} with lr={best_lr_adam}")
+    print(f"SGD result: F1: {best_f1_sgd :.3f} with lr={best_lr_sgd}")
+    print(f"SGDM result: F1: {best_f1_sgdm :.3f} with lr={best_lr_sgdm}")
+
+# =====================================================================================================================================================================
+
 def main():
-    circle_experiment(nb_epoch=300)
+    samples, labels = generate_circle_samples(1000)
+    plot_circle_samples(samples, labels)
+    compare_optims()
 # =====================================================================================================================================================================
 
 if __name__ == "__main__":

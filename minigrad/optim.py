@@ -1,7 +1,12 @@
 class Optimizer:
+    def __init__(self, model, **kwargs):
+        raise NotImplementedError
     # Assumes instances of Optimizer have a model attribute representing the model to optimize
     def zero_grad(self):
         self.model.zero_grad()
+    
+    def step(self):
+        raise NotImplementedError
 
 class SGD(Optimizer):
     """SGD Optimizer
@@ -17,7 +22,11 @@ class SGD(Optimizer):
         self.model = model
         self.lr = lr
         self.momentum = momentum
-        self.momentum_ma = None
+        self.momentum_ma = []
+        # We do that even if we have no momentum in order to have more generic code:
+        # Since we use a zip in step, if the list is empty, then no update occurs
+        for _ in model.params:
+            self.momentum_ma.append(0)
 
     def step(self):
         model_grad = self.model.grad
@@ -25,11 +34,6 @@ class SGD(Optimizer):
         if len(model_grad) != len(model_params):
             raise RuntimeError(f"Gradient and parameters mismatch: {len(model_params)} parameter tensors and {len(model_grad)} gradient tensors.")
 
-        # Create momentum array
-        if self.momentum_ma == None:
-            self.momentum_ma = []
-            for _ in model_grad:
-                self.momentum_ma.append(0)
         # Update parameters
         for i, (g, p, v) in enumerate(zip(model_grad, model_params, self.momentum_ma)):
             if self.momentum == 0.0: # Avoid unecessary computations
@@ -46,8 +50,11 @@ class Adam(Optimizer):
     def __init__(self, model, lr=0.001, betas=(0.9, 0.999), eps=1e-08):
         self.model = model
         self.lr = lr
-        self.momentum_ma = None # First order moving average
-        self.sec_ma = None # Second order moving average
+        self.momentum_ma = [] # First order moving average
+        self.sec_ma = [] # Second order moving average
+        for _ in self.model.params:
+            self.momentum_ma.append(0)
+            self.sec_ma.append(0)
         self.betas = betas
         self.eps = eps
 
@@ -58,12 +65,6 @@ class Adam(Optimizer):
             raise RuntimeError(f"Gradient and parameters mismatch: {len(model_params)} parameter tensors and {len(model_grad)} gradient tensors.")
 
         b_0, b_1 = self.betas
-        if self.momentum_ma == None: # First init, create the running averages for each group of params
-            self.momentum_ma = []
-            self.sec_ma = []
-            for _ in model_grad:
-                self.momentum_ma.append(0)
-                self.sec_ma.append(0)
         # Update the moving average and update params
         for i, (g, p, m, v) in enumerate(zip(model_grad, model_params, self.momentum_ma, self.sec_ma)):
             m_t = b_0 * m + (1 - b_0) * g

@@ -48,6 +48,8 @@ class Module(object):
     @params.setter
     def params(self, new_value):
         pass
+
+
 # ============================================================================================================
 
 class Linear(Module):
@@ -61,13 +63,16 @@ class Linear(Module):
         super(Linear, self).__init__()
 
         # Xavier initialization
-        self.weights = torch.empty(size=(output_features, input_features), requires_grad=False).uniform_(- 1, 1) * (input_features) ** -0.5
-        self.bias = torch.zeros(output_features, requires_grad=False)
+        self.weights = torch.empty(size=(output_features, input_features)).uniform_(- 1, 1) * (input_features) ** -0.5
+        self.bias = torch.empty(output_features)
+        self.bias[:] = 0 # Init bias tensor
 
     def forward(self, x):
         return self.weights @ x + self.bias 
 
     def backward(self, gradwrtoutput, x):
+         # view calls are for broadcasting. Each entry (i, j) of dl_dw 
+         # depends on entry i of gradwrtoutput and j of x
         dl_dw = gradwrtoutput.view(-1, 1) @ x.view(1, -1)
         dl_db = gradwrtoutput
         if self.grad is None:
@@ -89,7 +94,10 @@ class Sequential(Module):
     """
     def __init__(self, *args):
         super().__init__()
-        self.modules = args
+        self.modules = list(args)
+
+    def add_module(self, module):
+        self.modules.append(module)
         
     def forward(self, x):
         y = x
@@ -158,7 +166,19 @@ class Tanh(Module):
         return (ex - e_x) / (ex + e_x)
 
     def backward(self, gradwrtoutput, x):
-        gradwrtoutput * (1 - self.forward(x) ** 2)
+        return gradwrtoutput * (1 - self.forward(x) ** 2)
+# ============================================================================================================
+
+class Sigmoid(Module):
+    """Sigmoid activation function
+    NOTE: it is possible to implement it directly using a Tanh layer
+    """
+    def forward(self, x):
+        return 1 / (1 + e ** -x)
+
+    def backward(self, gradwrtoutput, x):
+        s = self.forward(x)
+        return gradwrtoutput * s * (1 - s)
 # ============================================================================================================
 
 class Loss(object):
@@ -172,9 +192,6 @@ class Loss(object):
     def __call__(self, pred, target):
         return self.forward(pred, target)
         
-    @property
-    def params(self):
-        return []
 # ============================================================================================================
 
 class MSELoss(Loss):
