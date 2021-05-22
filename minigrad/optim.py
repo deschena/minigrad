@@ -7,6 +7,7 @@ class Optimizer:
     
     def step(self):
         raise NotImplementedError
+# ============================================================================================================
 
 class SGD(Optimizer):
     """SGD Optimizer
@@ -20,6 +21,7 @@ class SGD(Optimizer):
             momentum (float, optional): Momentum of SGD optimizer. Defaults to 0.
         """
         self.model = model
+        self.model_params = model.params # Store them directly as Sequential generates a new array each time
         self.lr = lr
         self.momentum = momentum
         self.momentum_ma = []
@@ -30,10 +32,7 @@ class SGD(Optimizer):
 
     def step(self):
         model_grad = self.model.grad
-        model_params = self.model.params
-        if len(model_grad) != len(model_params):
-            raise RuntimeError(f"Gradient and parameters mismatch: {len(model_params)} parameter tensors and {len(model_grad)} gradient tensors.")
-
+        model_params = self.model_params
         # Update parameters
         for i, (g, p, v) in enumerate(zip(model_grad, model_params, self.momentum_ma)):
             if self.momentum == 0.0: # Avoid unecessary computations
@@ -49,6 +48,7 @@ class Adam(Optimizer):
     """
     def __init__(self, model, lr=0.001, betas=(0.9, 0.999), eps=1e-08):
         self.model = model
+        self.model_params = model.params # Store them directly as Sequential generates a new array each time
         self.lr = lr
         self.momentum_ma = [] # First order moving average
         self.sec_ma = [] # Second order moving average
@@ -60,10 +60,7 @@ class Adam(Optimizer):
 
     def step(self):
         model_grad = self.model.grad
-        model_params = self.model.params
-        if len(model_grad) != len(model_params):
-            raise RuntimeError(f"Gradient and parameters mismatch: {len(model_params)} parameter tensors and {len(model_grad)} gradient tensors.")
-
+        model_params = self.model_params
         b_0, b_1 = self.betas
         # Update the moving average and update params
         for i, (g, p, m, v) in enumerate(zip(model_grad, model_params, self.momentum_ma, self.sec_ma)):

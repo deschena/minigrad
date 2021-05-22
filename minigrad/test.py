@@ -5,8 +5,10 @@ import torch
 from matplotlib import pyplot as plt
 
 # =====================================================================================================================================================================
+# Running this file takes less than 2 minutes on a standard computer without GPU.
+# In only runs with the best learning rates
+# =====================================================================================================================================================================
 # Setups pyplot layout and deactivate PyTorch autograd
-# NOTE: RUNNING THE FILE SHOULD TAKE LESS THAN 10 MINUTES. IT TRAINS SEVERAL MODELS AND DRAWS PLOTS
 from matplotlib.pyplot import figure
 figure(dpi=300)
 torch.set_grad_enabled(False)
@@ -166,6 +168,12 @@ def plot_adam_vs_sgd(x, test_adam, test_sgd, test_sgdm, metric, momentum):
     # =====================================================================================================================================================================
 
 def plot_circle_samples(samples, labels):
+    """Plots a data sample
+
+    Args:
+        samples (torch.tensor): Tensor of all points
+        labels (torch.tensor): Labels of points
+    """
 
     central_points = samples[labels == 1]
     outter_points = samples[labels == 0]
@@ -183,6 +191,14 @@ def plot_circle_samples(samples, labels):
 # =====================================================================================================================================================================
 
 def simple_three_layer_model(use_sigmoid=False):
+    """Create a simple FCN to test the framework
+
+    Args:
+        use_sigmoid (bool, optional): If True, adds a sigmoid activation on the output. Defaults to False.
+
+    Returns:
+        nn.Module: The three layer FCN
+    """
     model = nn.Sequential(
             nn.Linear(2, 25),
             nn.ReLU(),
@@ -196,22 +212,26 @@ def simple_three_layer_model(use_sigmoid=False):
         model.add_module(nn.Sigmoid())
     return model
 # =====================================================================================================================================================================
-def compare_optims(nb_samples=1000, nb_epochs=70, sgd_momentum=0.9, use_sigmoid=False, ):
-    """Simple first experiment with circular boundary
+def compare_optims(nb_samples=1000, nb_epochs=70, sgd_momentum=0.9, use_sigmoid=False, best_lrs=None):
+    """Compare performance of different optimizers
 
     Args:
-        nb_samples (int, optional): Number of samples for train/test. Defaults to 1000.
-        nb_epochs (int, optional): Number of training epochs. Defaults to 300.
+        nb_samples (int, optional): Number of samples of training/test sets. Defaults to 1000.
+        nb_epochs (int, optional): Number of epochs to train each model. Defaults to 70.
+        sgd_momentum (float, optional): Momentum of SGDM optimizer. Defaults to 0.9.
+        use_sigmoid (bool, optional): Whether to inclde a sigmoid layer at the end of the network. Defaults to False.
+        best_lrs (dict, optional): If provided, only trains the models with the best learning rates. Defaults to None.
     """
     x_train, y_train = generate_circle_samples(nb_samples, seed=42)
     x_test, y_test = generate_circle_samples(nb_samples, seed=66)
 
-    lrs = [0.1, 0.01, 0.001]
+    lrs = [0.1, 0.01, 0.02, 0.05, 0.001, 0.002, 0.005]
     # Train first model with SGD without momentum
     best_lr_sgd = -1
     best_f1_sgd = -1
     f1_seq_sgd = None
-
+    if best_lrs != None:
+        lrs = [best_lrs["sgd"]]
     for lr in lrs:
         model = simple_three_layer_model(use_sigmoid)
         optimizer = optim.SGD(model, momentum=0)
@@ -228,7 +248,8 @@ def compare_optims(nb_samples=1000, nb_epochs=70, sgd_momentum=0.9, use_sigmoid=
     best_lr_sgdm = -1
     best_f1_sgdm = -1
     f1_seq_sgdm = None
-
+    if best_lrs != None:
+        lrs = [best_lrs["sgdm"]]
     for lr in lrs:
         model = simple_three_layer_model(use_sigmoid)
         optimizer = optim.SGD(model, momentum=sgd_momentum)
@@ -245,7 +266,8 @@ def compare_optims(nb_samples=1000, nb_epochs=70, sgd_momentum=0.9, use_sigmoid=
     best_lr_adam = -1
     best_f1_adam = -1
     f1_seq_adam = None
-
+    if best_lrs != None:
+        lrs = [best_lrs["adam"]]
     for lr in lrs:
         model = simple_three_layer_model(use_sigmoid)
         optimizer = optim.Adam(model, lr=lr)
@@ -278,8 +300,9 @@ def compare_optims(nb_samples=1000, nb_epochs=70, sgd_momentum=0.9, use_sigmoid=
 
 def main():
     samples, labels = generate_circle_samples(1000)
+    best_lrs = {"sgd": 0.002, "sgdm": 0.1, "adam": 0.005}
     plot_circle_samples(samples, labels)
-    compare_optims()
+    compare_optims(best_lrs=best_lrs)
 # =====================================================================================================================================================================
 
 if __name__ == "__main__":

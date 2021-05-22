@@ -108,6 +108,7 @@ class Sequential(Module):
     def backward(self, gradwrtoutput, x):
         forward_values = [x]
         y = x
+        # First needs to recompute the forward values
         for m in self.modules:
             y = m.forward(y)
             forward_values.append(y)
